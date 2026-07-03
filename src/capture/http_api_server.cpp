@@ -356,12 +356,13 @@ catcheye::http::HttpResponse get_capture_dates(const std::filesystem::path& capt
     storage.path = std::filesystem::absolute(capture_root).string();
     storage.total_bytes = space.capacity;
     storage.available_bytes = space.available;
-    storage.used_bytes = storage.total_bytes >= storage.available_bytes
-        ? storage.total_bytes - storage.available_bytes
+    storage.used_bytes = storage.total_bytes >= space.free
+        ? storage.total_bytes - space.free
         : 0;
-    storage.used_percent = storage.total_bytes == 0
+    const std::uintmax_t df_total_bytes = storage.used_bytes + storage.available_bytes;
+    storage.used_percent = df_total_bytes == 0
         ? 0.0
-        : (static_cast<double>(storage.used_bytes) / static_cast<double>(storage.total_bytes)) * 100.0;
+        : (static_cast<double>(storage.used_bytes) / static_cast<double>(df_total_bytes)) * 100.0;
 
     if (std::filesystem::exists(capture_root)) {
         for (const auto& entry : std::filesystem::directory_iterator(capture_root)) {

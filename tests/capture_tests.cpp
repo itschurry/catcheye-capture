@@ -617,7 +617,7 @@ void test_http_capture_image_api()
     require(dates.find(R"("path":")") != std::string::npos, "storage path missing");
     require(dates.find(R"("used_percent":)") != std::string::npos, "storage used percent missing");
     require(total_bytes >= available_bytes, "storage total should be >= available");
-    require(used_bytes == total_bytes - available_bytes, "storage used bytes mismatch");
+    require(used_bytes + available_bytes <= total_bytes, "storage used and available should not exceed total");
     require(json_uint_field(dates, "capture_bytes") == expected_capture_bytes, "capture byte count mismatch");
     require(json_uint_field(dates, "capture_count") == 3, "capture file count mismatch");
     require(dates.find(R"({"date":"2026-07-03","count":2})") != std::string::npos, "capture date count missing");

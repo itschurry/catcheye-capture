@@ -235,7 +235,7 @@ curl http://<host>:8090/api/captures/latest
 curl -o frame.jpg http://<host>:8090/api/captures/file/2026-07-03/142530_015_000012.jpg
 ```
 
-`/api/captures/dates`는 `--capture-dir`가 올라간 파일시스템의 전체/가용 용량과 Capture JPEG 합계도 반환한다.
+`/api/captures/dates`는 `--capture-dir`가 올라간 파일시스템의 전체/가용 용량과 Capture JPEG 합계도 반환한다. Used/Use%는 `df -h <capture-dir>`와 같은 기준이다.
 
 Viewer 녹화:
 

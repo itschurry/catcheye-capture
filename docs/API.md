@@ -106,8 +106,8 @@ curl -o frame.jpg http://<host>:8090/api/captures/file/2026-07-03/142530_015_000
     "path": "/home/user/catcheye-capture/captures",
     "total_bytes": 250000000000,
     "available_bytes": 180000000000,
-    "used_bytes": 70000000000,
-    "used_percent": 28.0,
+    "used_bytes": 40000000000,
+    "used_percent": 18.2,
     "capture_bytes": 1234567890,
     "capture_count": 312
   },
@@ -120,7 +120,7 @@ curl -o frame.jpg http://<host>:8090/api/captures/file/2026-07-03/142530_015_000
 }
 ```
 
-`storage`는 `--capture-dir`가 올라간 파일시스템 기준이다. `capture_bytes`와 `capture_count`는 이미지 뷰어가 인정하는 `YYYY-MM-DD/HHMMSS_mmm_NNNNNN.jpg` 파일만 합산한다.
+`storage`는 `--capture-dir`가 올라간 파일시스템 기준이다. `used_bytes`와 `used_percent`는 `df -h <capture_dir>`의 Used/Use%와 같은 기준으로 계산한다. `capture_bytes`와 `capture_count`는 이미지 뷰어가 인정하는 `YYYY-MM-DD/HHMMSS_mmm_NNNNNN.jpg` 파일만 합산한다.
 
 목록 응답 예:
 
