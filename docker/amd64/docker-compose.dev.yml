@@ -1,0 +1,28 @@
+name: catcheye-capture-raspbian
+services:
+  catcheye-capture-develop-amd64:
+    extends:
+      file: docker-compose.base.yml
+      service: base-service
+    image: ghcr.io/itschurry/catcheye-capture:develop-amd64
+    container_name: catcheye-capture-develop-amd64
+    working_dir: /home/user/catcheye-capture
+    privileged: true
+    environment:
+      - BUILD_TYPE=develop
+    volumes:
+      - ../../:/home/user/catcheye-capture:rw
+      - ${HOME}/shared:/mnt/shared:rw
+      - ${HOME}/.ssh:/home/user/.ssh:ro
+      # - vscode_server:/home/user/.vscode-server:rw
+      # - vscode_server_ext:/home/user/.vscode-server/extensions:rw
+      # - vscode_server_data:/home/user/.vscode-server/data:rw
+
+    command: bash
+    stdin_open: true
+    tty: true
+
+# volumes:
+#   vscode_server:
+#   vscode_server_ext:
+#   vscode_server_data:

@@ -1,0 +1,27 @@
+.DS_Store
+build
+install
+log/*
+CMakeFiles/
+CMakeCache.txt
+Makefile
+cmake_install.cmake
+compile_commands.json
+.codex
+
+**/*.log
+*.bag
+**/.DS_Store
+**/__pycache__/**
+
+# Python bytecode / cache
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class
+!log/.gitkeep
+
+.env
+**/*.hef
+
+temp

@@ -1,0 +1,13 @@
+[Unit]
+Description=CatchEye Capture runtime
+After=multi-user.target
+
+[Service]
+Type=simple
+User=user
+Group=user
+WorkingDirectory=/home/user/catcheye-capture
+ExecStart=/home/user/catcheye-capture/install/release/scripts/run.sh
+
+[Install]
+WantedBy=multi-user.target

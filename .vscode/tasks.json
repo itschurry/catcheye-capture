@@ -1,0 +1,141 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "cmake: configure[Debug]",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-c",
+        "cmake -S . -B build/debug -G Ninja -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_BUILD_TYPE=Debug"
+      ],
+      "problemMatcher": [],
+      "group": {
+        "kind": "build",
+        "isDefault": false
+      }
+    },
+    {
+      "label": "cmake: configure[Release]",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-c",
+        "cmake -S . -B build/release -G Ninja -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_BUILD_TYPE=Release"
+      ],
+      "problemMatcher": [],
+      "group": {
+        "kind": "build",
+        "isDefault": false
+      }
+    },
+    {
+      "label": "cmake: configure[Release,Hailo]",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-c",
+        "cmake -S . -B build/release-hailo -G Ninja -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_BUILD_TYPE=Release -DCATCHEYE_VISION_DETECTION_ENABLE_HAILO=ON"
+      ],
+      "problemMatcher": [],
+      "group": {
+        "kind": "build",
+        "isDefault": false
+      }
+    },
+    {
+      "label": "cmake: build[Debug]",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-c",
+        "cmake --build build/debug --config Debug -- -j $(nproc) && ln -sf $(realpath build/debug/compile_commands.json) build/compile_commands.json"
+      ],
+      "problemMatcher": [],
+      "group": {
+        "kind": "build",
+        "isDefault": false
+      }
+    },
+    {
+      "label": "cmake: build[Release]",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-c",
+        "cmake --build build/release --config Release -- -j $(nproc) && ln -sf $(realpath build/release/compile_commands.json) build/compile_commands.json"
+      ],
+      "problemMatcher": [],
+      "group": {
+        "kind": "build",
+        "isDefault": false
+      }
+    },
+    {
+      "label": "cmake: build[Release,Hailo]",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-c",
+        "cmake --build build/release-hailo --config Release -- -j $(nproc) && ln -sf $(realpath build/release-hailo/compile_commands.json) build/compile_commands.json"
+      ],
+      "problemMatcher": [],
+      "group": {
+        "kind": "build",
+        "isDefault": false
+      }
+    },
+    {
+      "label": "cmake: clean",
+      "type": "shell",
+      "command": "rm -rf build install log",
+      "group": {
+        "kind": "build",
+        "isDefault": false
+      }
+    },
+    {
+      "label": "cmake: clean packages-select",
+      "type": "shell",
+      "command": "rm -rf build/debug/${input:pkgName} build/release/${input:pkgName} install/${input:pkgName} log/latest_build/${input:pkgName}",
+      "group": {
+        "kind": "build",
+        "isDefault": false
+      }
+    },
+    {
+      "label": "cmake: install[Debug]",
+      "type": "shell",
+      "command": "rm -rf install/debug && cmake --install build/debug --prefix install/debug",
+      "group": {
+        "kind": "build",
+        "isDefault": false
+      }
+    },
+    {
+      "label": "cmake: install[Release]",
+      "type": "shell",
+      "command": "rm -rf install/release && cmake --install build/release --prefix install/release",
+      "group": {
+        "kind": "build",
+        "isDefault": false
+      }
+    },
+    {
+      "label": "cmake: install[Release,Hailo]",
+      "type": "shell",
+      "command": "rm -rf install/release-hailo && cmake --install build/release-hailo --prefix install/release-hailo",
+      "group": {
+        "kind": "build",
+        "isDefault": false
+      }
+    }
+  ],
+  "inputs": [
+    {
+      "id": "pkgName",
+      "type": "promptString",
+      "description": "Enter the package name to build"
+    }
+  ]
+}

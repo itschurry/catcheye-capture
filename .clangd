@@ -1,0 +1,19 @@
+CompileFlags:
+  CompilationDatabase: build
+  Add:
+    - "-I/opt/ros/jazzy/include"
+    - "-I/home/user/ros_ws/install/include"
+    - "-I/home/user/ros_ws/src"
+
+Diagnostics:
+  UnusedIncludes: None
+  Suppress:
+    - "clang-diagnostic-unused-parameter"
+    - "clang-diagnostic-unused-variable"
+    - "clang-diagnostic-unused-function"
+    - "clang-diagnostic-unused-private-field"
+    - "clang-diagnostic-unused-local-typedef"
+    - "clang-diagnostic-unused-but-set-variable"
+
+Index:
+  Background: Build

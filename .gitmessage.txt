@@ -1,0 +1,18 @@
+<type>: <한국어 요약>
+
+# 허용 type
+# feat     : 기능 추가/변경
+# fix      : 버그 수정
+# docs     : 문서 수정
+# style    : 포맷/스타일 변경
+# refactor : 리팩터링
+# test     : 테스트 추가/수정
+# chore    : 빌드/설정/기타 작업
+# perf     : 성능 개선
+# ci       : CI 설정 변경
+# build    : 빌드 시스템 변경
+# revert   : 이전 커밋 되돌리기
+
+# 예시
+# feat: ROI 경계 시각화 추가
+# fix: 잘못된 좌표 변환 오류 수정

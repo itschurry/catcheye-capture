@@ -1,0 +1,76 @@
+Checks: >
+  clang-analyzer-*,
+  bugprone-*,
+  cppcoreguidelines-*,
+  hicpp-*,
+  modernize-*,
+  performance-*,
+  readability-*,
+  misc-const-correctness,
+  misc-definitions-in-headers,
+  misc-unused-using-decls,
+  misc-unused-includes,
+  -modernize-use-trailing-return-type,
+  -modernize-use-auto,
+  -modernize-pass-by-value,
+  -modernize-avoid-c-arrays
+
+WarningsAsErrors: "clang-analyzer-*,misc-unused-includes"
+
+FormatStyle: file
+
+CheckOptions:
+  - key: modernize-use-nullptr.NullMacros
+    value: "NULL"
+  - key: modernize-use-nullptr.IgnoreMacros
+    value: "false"
+  - key: readability-identifier-naming.VariableCase
+    value: lower_case
+  - key: readability-identifier-naming.ClassCase
+    value: CamelCase
+  - key: readability-identifier-naming.FunctionCase
+    value: lowerCamelCase
+  - key: readability-identifier-naming.EnumCase
+    value: UPPER_CASE
+  - key: readability-identifier-naming.EnumConstantCase
+    value: UPPER_CASE
+  - key: readability-identifier-naming.ConstantCase
+    value: UPPER_CASE
+  - key: readability-identifier-naming.GlobalConstantCase
+    value: UPPER_CASE
+  - key: readability-identifier-naming.NamespaceCase
+    value: snake_case
+  - key: readability-identifier-naming.TypeAliasCase
+    value: CamelCase
+  - key: readability-identifier-naming.FunctionParameterCase
+    value: lower_case
+  - key: readability-identifier-naming.PrivateMemberCase
+    value: m_lower_case
+  - key: readability-identifier-naming.ProtectedMemberCase
+    value: m_lower_case
+  - key: readability-identifier-naming.PublicMemberCase
+    value: m_lower_case
+  - key: readability-identifier-naming.StaticMemberCase
+    value: s_lower_case
+  - key: readability-identifier-naming.GlobalVariableCase
+    value: g_lower_case
+  - key: readability-identifier-naming.LocalVariableCase
+    value: lower_case
+  - key: readability-identifier-naming.ParameterCase
+    value: lower_case
+  - key: readability-identifier-naming.LabelCase
+    value: lower_case
+  - key: readability-identifier-naming.ConstructorParameterCase
+    value: lower_case
+  - key: readability-identifier-naming.ConstructorInitializerCase
+    value: lower_case
+  - key: readability-identifier-naming.UsingCase
+    value: lower_case
+  - key: readability-identifier-naming.TypedefCase
+    value: CamelCase
+  - key: readability-identifier-naming.VariableDefinitionCase
+    value: lower_case
+  - key: readability-identifier-naming.ConstantDefinitionCase
+    value: UPPER_CASE
+  - key: readability-identifier-naming.GlobalConstantDefinitionCase
+    value: UPPER_CASE

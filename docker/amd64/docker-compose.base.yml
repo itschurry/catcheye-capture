@@ -1,0 +1,13 @@
+services:
+  base-service:
+    platform: linux/amd64
+    build:
+      context: ../..
+      dockerfile: docker/amd64/Dockerfile
+      args:
+        UID: ${UID:?run update_env.sh}
+        GID: ${GID:?run update_env.sh}
+        USERNAME: ${USERNAME:?run update_env.sh}
+        HOME: ${HOME:?run update_env.sh}
+    env_file:
+      - .env
