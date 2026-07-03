@@ -1,4 +1,4 @@
 [submodule "third_party/catcheye-vision-sdk"]
 	path = third_party/catcheye-vision-sdk
-	url = https://github.com/itschurry/catcheye-vision-sdk.git
+	url = git@github.com:itschurry/catcheye-vision-sdk.git
     branch = develop
