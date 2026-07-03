@@ -242,20 +242,16 @@ bool HttpApiServer::start()
         .port = config_.port,
     });
 
-    server_->add_route("/api/device-info", [this](const catcheye::http::HttpRequest& request) {
+    server_->add_route("/api/device-info", [](const catcheye::http::HttpRequest& request) {
         if (request.method == "GET") {
-            std::ostringstream oss;
-            oss << "{\"app\":\"catcheye-capture\",\"kind\":\"capture\""
-                << ",\"person_roi_alert_disabled\":false"
-                << ",\"capabilities\":{"
-                << "\"viewer\":true,"
-                << "\"monitor\":true,"
-                << "\"roi\":false,"
-                << "\"recording\":false,"
-                << "\"camera_properties\":true,"
-                << "\"camera_geometry\":false"
-                << "},\"capture\":" << processor_->status_json() << "}";
-            return catcheye::http::HttpResponse{200, "OK", oss.str()};
+            return catcheye::http::HttpResponse{200, "OK", R"({"app":"catcheye-capture","kind":"capture"})"};
+        }
+        return catcheye::http::HttpResponse{405, "Method Not Allowed", catcheye::http::json_error_body("method not allowed")};
+    });
+
+    server_->add_route("/api/capture/status", [this](const catcheye::http::HttpRequest& request) {
+        if (request.method == "GET") {
+            return catcheye::http::HttpResponse{200, "OK", processor_->status_json()};
         }
         return catcheye::http::HttpResponse{405, "Method Not Allowed", catcheye::http::json_error_body("method not allowed")};
     });

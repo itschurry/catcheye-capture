@@ -266,9 +266,6 @@ std::string capture_status_json(const CaptureStatus& status)
         << ",\"capture_requested\":" << (status.capture_requested ? "true" : "false")
         << ",\"capture_count\":" << status.capture_count
         << ",\"ignored_trigger_count\":" << status.ignored_trigger_count
-        << ",\"capture_connected\":true"
-        << ",\"roi_enabled\":false"
-        << ",\"recording_enabled\":false"
         << ",\"last_saved_path\":\"" << json_escape(status.last_saved_path) << "\""
         << ",\"last_error\":\"" << json_escape(status.last_error) << "\"}";
     return oss.str();
