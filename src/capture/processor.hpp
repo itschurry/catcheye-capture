@@ -56,6 +56,7 @@ class CaptureProcessor final : public catcheye::runtime::FrameProcessor {
     RecordingStatus resume_recording();
     RecordingStatus save_recording();
     RecordingStatus cancel_recording();
+    const std::string& capture_dir() const;
 
   private:
     std::string build_capture_path_locked();

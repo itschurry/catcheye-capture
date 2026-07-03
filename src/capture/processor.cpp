@@ -325,6 +325,11 @@ RecordingStatus CaptureProcessor::cancel_recording()
     return recording_controller_.cancel();
 }
 
+const std::string& CaptureProcessor::capture_dir() const
+{
+    return config_.capture_dir;
+}
+
 std::string CaptureProcessor::build_capture_path_locked()
 {
     const auto now = std::chrono::system_clock::now();

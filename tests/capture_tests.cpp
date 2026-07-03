@@ -60,7 +60,29 @@ bool throws_for(std::vector<std::string> args)
     }
 }
 
-std::string http_request(int port, std::string_view method, std::string_view path)
+struct HttpTestResponse {
+    int status_code = 0;
+    std::string content_type;
+    std::string body;
+};
+
+std::string http_header_value(const std::string& headers, std::string_view name)
+{
+    const std::string needle = std::string(name) + ": ";
+    std::istringstream stream(headers);
+    std::string line;
+    while (std::getline(stream, line)) {
+        if (!line.empty() && line.back() == '\r') {
+            line.pop_back();
+        }
+        if (line.rfind(needle, 0) == 0) {
+            return line.substr(needle.size());
+        }
+    }
+    return {};
+}
+
+HttpTestResponse http_request_raw(int port, std::string_view method, std::string_view path)
 {
     const int sock_fd = ::socket(AF_INET, SOCK_STREAM, 0);
     require(sock_fd >= 0, "failed to create test socket");
@@ -89,10 +111,23 @@ std::string http_request(int port, std::string_view method, std::string_view pat
     }
     ::close(sock_fd);
 
-    require(response.rfind("HTTP/1.1 200 OK\r\n", 0) == 0, "HTTP response status mismatch");
+    require(response.rfind("HTTP/1.1 ", 0) == 0, "HTTP response status line missing");
     const std::size_t body_pos = response.find("\r\n\r\n");
     require(body_pos != std::string::npos, "HTTP response body missing");
-    return response.substr(body_pos + 4U);
+    const std::string status_text = response.substr(9U, 3U);
+    const std::string headers = response.substr(0, body_pos + 2U);
+    return {
+        .status_code = std::stoi(status_text),
+        .content_type = http_header_value(headers, "Content-Type"),
+        .body = response.substr(body_pos + 4U),
+    };
+}
+
+std::string http_request(int port, std::string_view method, std::string_view path)
+{
+    const auto response = http_request_raw(port, method, path);
+    require(response.status_code == 200, "HTTP response status mismatch");
+    return response.body;
 }
 
 std::string http_get(int port, std::string_view path)
@@ -148,6 +183,21 @@ bool ends_with(std::string_view value, std::string_view suffix)
 {
     return value.size() >= suffix.size()
         && value.substr(value.size() - suffix.size()) == suffix;
+}
+
+std::uintmax_t json_uint_field(const std::string& json, std::string_view field)
+{
+    const std::string needle = "\"" + std::string(field) + "\":";
+    const std::size_t start = json.find(needle);
+    require(start != std::string::npos, "JSON uint field missing: " + std::string(field));
+    std::size_t pos = start + needle.size();
+    std::uintmax_t value = 0;
+    require(pos < json.size() && json[pos] >= '0' && json[pos] <= '9', "JSON uint field is not numeric: " + std::string(field));
+    while (pos < json.size() && json[pos] >= '0' && json[pos] <= '9') {
+        value = (value * 10U) + static_cast<std::uintmax_t>(json[pos] - '0');
+        ++pos;
+    }
+    return value;
 }
 
 void wait_for_fresh_second()
@@ -524,6 +574,85 @@ void test_http_recording_api()
     std::filesystem::remove_all(output_root);
 }
 
+void test_http_capture_image_api()
+{
+    const auto output_root = std::filesystem::temp_directory_path() / "catcheye_capture_image_api_tests";
+    std::filesystem::remove_all(output_root);
+
+    const auto older = output_root / "2026-07-02" / "091500_010_000001.jpg";
+    const auto first = output_root / "2026-07-03" / "142530_015_000012.jpg";
+    const auto latest = output_root / "2026-07-03" / "142531_220_000013.jpg";
+    write_test_jpeg(older, 32);
+    write_test_jpeg(first, 64);
+    write_test_jpeg(latest, 96);
+    std::filesystem::create_directories(output_root / "2026-07-03");
+    {
+        std::ofstream ignored(output_root / "2026-07-03" / "not-a-capture.txt");
+        ignored << "ignore";
+    }
+
+    catcheye::capture::CaptureProcessorConfig config;
+    config.capture_dir = output_root.string();
+
+    catcheye::capture::CaptureProcessor processor(
+        config,
+        std::make_unique<FakeTriggerSignal>(),
+        std::make_unique<FakeCompleteSignal>());
+    require(processor.initialize(), "processor should initialize");
+
+    catcheye::capture::HttpApiServer server(
+        {.bind_address = "127.0.0.1", .port = 18092},
+        &processor,
+        nullptr);
+    require(server.start(), "HTTP API server should start");
+
+    const std::string dates = http_get(18092, "/api/captures/dates");
+    const std::uintmax_t expected_capture_bytes =
+        std::filesystem::file_size(older) +
+        std::filesystem::file_size(first) +
+        std::filesystem::file_size(latest);
+    const auto total_bytes = json_uint_field(dates, "total_bytes");
+    const auto available_bytes = json_uint_field(dates, "available_bytes");
+    const auto used_bytes = json_uint_field(dates, "used_bytes");
+    require(dates.find(R"("path":")") != std::string::npos, "storage path missing");
+    require(dates.find(R"("used_percent":)") != std::string::npos, "storage used percent missing");
+    require(total_bytes >= available_bytes, "storage total should be >= available");
+    require(used_bytes == total_bytes - available_bytes, "storage used bytes mismatch");
+    require(json_uint_field(dates, "capture_bytes") == expected_capture_bytes, "capture byte count mismatch");
+    require(json_uint_field(dates, "capture_count") == 3, "capture file count mismatch");
+    require(dates.find(R"({"date":"2026-07-03","count":2})") != std::string::npos, "capture date count missing");
+    require(dates.find(R"({"date":"2026-07-02","count":1})") != std::string::npos, "older capture date count missing");
+    require(dates.find("not-a-capture") == std::string::npos, "non-capture file should be ignored");
+
+    const std::string list = http_get(18092, "/api/captures?date=2026-07-03&limit=1");
+    require(list.find(R"("filename":"142531_220_000013.jpg")") != std::string::npos, "latest image should be first");
+    require(list.find(R"("next_cursor":"142531_220_000013.jpg")") != std::string::npos, "next cursor missing");
+    require(list.find(R"("width":4)") != std::string::npos, "image width missing");
+    require(list.find(R"("height":4)") != std::string::npos, "image height missing");
+    require(list.find(R"("captured_at":"2026-07-03T14:25:31.220)") != std::string::npos, "captured_at missing");
+
+    const std::string page2 = http_get(18092, "/api/captures?date=2026-07-03&limit=1&cursor=142531_220_000013.jpg");
+    require(page2.find(R"("filename":"142530_015_000012.jpg")") != std::string::npos, "cursor page image missing");
+    require(page2.find(R"("next_cursor":"")") != std::string::npos, "last page cursor should be empty");
+
+    const std::string latest_json = http_get(18092, "/api/captures/latest");
+    require(latest_json.find(R"("filename":"142531_220_000013.jpg")") != std::string::npos, "latest endpoint mismatch");
+
+    const auto file = http_request_raw(18092, "GET", "/api/captures/file/2026-07-03/142531_220_000013.jpg");
+    require(file.status_code == 200, "capture file should return 200");
+    require(file.content_type == "image/jpeg", "capture file content type mismatch");
+    require(file.body.size() == std::filesystem::file_size(latest), "capture file size mismatch");
+
+    const auto missing = http_request_raw(18092, "GET", "/api/captures/file/2026-07-03/142531_220_999999.jpg");
+    require(missing.status_code == 404, "missing capture file should return 404");
+
+    const auto escaped = http_request_raw(18092, "GET", "/api/captures/file/2026-07-03/../secret.jpg");
+    require(escaped.status_code == 400, "path traversal should return 400");
+
+    server.stop();
+    std::filesystem::remove_all(output_root);
+}
+
 void test_recording_start_fails_when_path_exists()
 {
     const auto output_root = std::filesystem::temp_directory_path() / "catcheye_capture_recording_collision_tests";
@@ -592,6 +721,7 @@ int main()
     test_capture_metadata_for_viewer();
     test_http_device_info_and_capture_status();
     test_http_recording_api();
+    test_http_capture_image_api();
     test_recording_start_fails_when_path_exists();
     test_busy_trigger_is_ignored();
     std::cout << "capture tests passed\n";

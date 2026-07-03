@@ -15,6 +15,10 @@ http://<host>:8090/api
 | `GET` | `/api/device-info` | 앱 식별 정보 조회 |
 | `GET` | `/api/capture/status` | 캡처 런타임 상태 조회 |
 | `POST` | `/api/capture/request` | GPIO 없이 다음 프레임 캡처 요청 |
+| `GET` | `/api/captures/dates` | 저장된 JPEG 날짜 목록 조회 |
+| `GET` | `/api/captures?date=YYYY-MM-DD&limit=100&cursor=<filename>` | 저장된 JPEG 목록 조회 |
+| `GET` | `/api/captures/file/<date>/<filename>` | 저장된 JPEG 원본 조회 |
+| `GET` | `/api/captures/latest` | 최신 저장 JPEG metadata 조회 |
 | `GET` | `/api/recording` | Viewer 녹화 상태 조회 |
 | `POST` | `/api/recording/start` | Viewer 녹화 시작 |
 | `POST` | `/api/recording/pause` | Viewer 녹화 일시정지 |
@@ -82,6 +86,64 @@ curl -X POST http://<host>:8090/api/capture/request
 ```
 
 GPIO 입력 없이 다음 프레임 저장을 요청한다. 응답은 `GET /api/capture/status`와 같은 JSON이다.
+
+## Capture Image API
+
+저장된 JPEG는 `--capture-dir` 아래 `YYYY-MM-DD/*.jpg` 형식만 노출한다. 다른 경로나 확장자는 실패한다.
+
+```bash
+curl http://<host>:8090/api/captures/dates
+curl 'http://<host>:8090/api/captures?date=2026-07-03&limit=100'
+curl http://<host>:8090/api/captures/latest
+curl -o frame.jpg http://<host>:8090/api/captures/file/2026-07-03/142530_015_000012.jpg
+```
+
+날짜 응답 예:
+
+```json
+{
+  "storage": {
+    "path": "/home/user/catcheye-capture/captures",
+    "total_bytes": 250000000000,
+    "available_bytes": 180000000000,
+    "used_bytes": 70000000000,
+    "used_percent": 28.0,
+    "capture_bytes": 1234567890,
+    "capture_count": 312
+  },
+  "dates": [
+    {
+      "date": "2026-07-03",
+      "count": 12
+    }
+  ]
+}
+```
+
+`storage`는 `--capture-dir`가 올라간 파일시스템 기준이다. `capture_bytes`와 `capture_count`는 이미지 뷰어가 인정하는 `YYYY-MM-DD/HHMMSS_mmm_NNNNNN.jpg` 파일만 합산한다.
+
+목록 응답 예:
+
+```json
+{
+  "date": "2026-07-03",
+  "items": [
+    {
+      "filename": "142530_015_000012.jpg",
+      "date": "2026-07-03",
+      "captured_at": "2026-07-03T14:25:30.015+09:00",
+      "sequence": 12,
+      "size_bytes": 184223,
+      "width": 2304,
+      "height": 1296,
+      "url": "/api/captures/file/2026-07-03/142530_015_000012.jpg"
+    }
+  ],
+  "next_cursor": ""
+}
+```
+
+`/api/captures/latest`는 같은 image metadata 객체 하나를 반환한다. JPEG 원본 응답은 `Content-Type: image/jpeg`다.
 
 ## Recording API
 
