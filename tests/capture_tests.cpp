@@ -1,17 +1,23 @@
 #include <chrono>
 #include <cstdint>
+#include <ctime>
 #include <filesystem>
+#include <fstream>
 #include <functional>
+#include <iomanip>
 #include <iostream>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <vector>
 
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include <opencv2/core.hpp>
 #include <opencv2/imgcodecs.hpp>
 
 #include "catcheye/input/pixel_format.hpp"
@@ -54,7 +60,7 @@ bool throws_for(std::vector<std::string> args)
     }
 }
 
-std::string http_get(int port, std::string_view path)
+std::string http_request(int port, std::string_view method, std::string_view path)
 {
     const int sock_fd = ::socket(AF_INET, SOCK_STREAM, 0);
     require(sock_fd >= 0, "failed to create test socket");
@@ -65,8 +71,9 @@ std::string http_get(int port, std::string_view path)
     require(::inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr) == 1, "failed to parse test address");
     require(::connect(sock_fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) == 0, "failed to connect test socket");
 
-    const std::string request = "GET " + std::string(path) + " HTTP/1.1\r\n"
+    const std::string request = std::string(method) + " " + std::string(path) + " HTTP/1.1\r\n"
         "Host: 127.0.0.1\r\n"
+        "Content-Length: 0\r\n"
         "Connection: close\r\n\r\n";
     require(::send(sock_fd, request.data(), request.size(), 0) == static_cast<ssize_t>(request.size()), "failed to send HTTP request");
 
@@ -88,12 +95,86 @@ std::string http_get(int port, std::string_view path)
     return response.substr(body_pos + 4U);
 }
 
+std::string http_get(int port, std::string_view path)
+{
+    return http_request(port, "GET", path);
+}
+
+std::string http_post(int port, std::string_view path)
+{
+    return http_request(port, "POST", path);
+}
+
+std::string today_dir_name()
+{
+    const auto now = std::chrono::system_clock::now();
+    const std::time_t timestamp = std::chrono::system_clock::to_time_t(now);
+    std::tm tm{};
+    localtime_r(&timestamp, &tm);
+
+    std::ostringstream oss;
+    oss << std::put_time(&tm, "%Y-%m-%d");
+    return oss.str();
+}
+
+std::filesystem::path today_capture_dir(const std::filesystem::path& root)
+{
+    return root / today_dir_name();
+}
+
+void write_test_jpeg(const std::filesystem::path& path, int value)
+{
+    std::filesystem::create_directories(path.parent_path());
+    const cv::Mat image(4, 4, CV_8UC3, cv::Scalar(value, value, value));
+    require(cv::imwrite(path.string(), image), "failed to create test JPEG");
+}
+
+int count_files_with_prefix(const std::filesystem::path& root, std::string_view prefix)
+{
+    if (!std::filesystem::exists(root)) {
+        return 0;
+    }
+
+    int count = 0;
+    for (const auto& entry : std::filesystem::recursive_directory_iterator(root)) {
+        if (entry.path().filename().string().rfind(std::string(prefix), 0) == 0) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+bool ends_with(std::string_view value, std::string_view suffix)
+{
+    return value.size() >= suffix.size()
+        && value.substr(value.size() - suffix.size()) == suffix;
+}
+
+void wait_for_fresh_second()
+{
+    const std::time_t start = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+    while (std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()) == start) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+}
+
 catcheye::input::Frame make_test_frame()
 {
     catcheye::input::Frame frame;
     frame.width = 4;
     frame.height = 4;
     frame.stride = 12;
+    frame.format = catcheye::input::PixelFormat::BGR;
+    frame.data.resize(static_cast<std::size_t>(frame.stride * frame.height), 127);
+    return frame;
+}
+
+catcheye::input::Frame make_recording_frame()
+{
+    catcheye::input::Frame frame;
+    frame.width = 64;
+    frame.height = 64;
+    frame.stride = 192;
     frame.format = catcheye::input::PixelFormat::BGR;
     frame.data.resize(static_cast<std::size_t>(frame.stride * frame.height), 127);
     return frame;
@@ -164,6 +245,7 @@ void test_parse_defaults()
     auto options = parse({"catcheye-capture"});
     require(options.http_port == 8090, "default HTTP port mismatch");
     require(options.capture_dir == "captures", "default capture dir mismatch");
+    require(options.recording_dir == "recordings", "default recording dir mismatch");
     require(options.jpeg_quality == 95, "default JPEG quality mismatch");
     require(!options.websocket_enabled, "websocket should be disabled by default");
     require(options.websocket_port == 8080, "default websocket port mismatch");
@@ -180,6 +262,7 @@ void test_parse_validation()
     require(throws_for({"catcheye-capture", "--complete-pulse-ms", "-1"}), "negative pulse should be rejected");
     require(throws_for({"catcheye-capture", "--jpeg-quality", "0"}), "low JPEG quality should be rejected");
     require(throws_for({"catcheye-capture", "--jpeg-quality", "101"}), "high JPEG quality should be rejected");
+    require(throws_for({"catcheye-capture", "--recording-dir", ""}), "empty recording dir should be rejected");
     require(throws_for({"catcheye-capture", "--ws", "-1"}), "negative websocket port should be rejected");
     auto options = parse({"catcheye-capture", "--ws", "8099"});
     require(options.websocket_enabled, "websocket should be enabled");
@@ -230,6 +313,88 @@ void test_capture_save_and_sequence()
         }
     }
     require(jpeg_count == 2, "JPEG file count mismatch");
+
+    std::filesystem::remove_all(output_root);
+}
+
+void test_capture_sequence_recovers_from_existing_files()
+{
+    const auto output_root = std::filesystem::temp_directory_path() / "catcheye_capture_recover_sequence_tests";
+    std::filesystem::remove_all(output_root);
+
+    const auto existing_path = today_capture_dir(output_root) / "120000_000_000007.jpg";
+    write_test_jpeg(existing_path, 32);
+    const auto existing_size = std::filesystem::file_size(existing_path);
+
+    catcheye::capture::CaptureProcessorConfig config;
+    config.capture_dir = output_root.string();
+
+    auto trigger = std::make_unique<FakeTriggerSignal>();
+    auto* trigger_ptr = trigger.get();
+
+    catcheye::capture::CaptureProcessor processor(
+        config,
+        std::move(trigger),
+        std::make_unique<FakeCompleteSignal>());
+    require(processor.initialize(), "processor should initialize");
+
+    trigger_ptr->trigger();
+    processor.process(make_test_frame(), {});
+
+    const auto status = processor.status();
+    require(status.capture_count == 1, "capture count should stay process-local");
+    require(status.last_error.empty(), "last error should be empty after recovered save");
+    require(ends_with(status.last_saved_path, "_000008.jpg"), "saved sequence should continue after existing files");
+    require(std::filesystem::exists(existing_path), "existing JPEG should remain");
+    require(std::filesystem::file_size(existing_path) == existing_size, "existing JPEG should not be overwritten");
+    require(cv::imread(status.last_saved_path).empty() == false, "saved JPEG should be readable");
+    require(count_files_with_prefix(output_root, ".tmp.") == 0, "temporary JPEG should be removed");
+
+    int jpeg_count = 0;
+    for (const auto& entry : std::filesystem::recursive_directory_iterator(output_root)) {
+        if (entry.path().extension() == ".jpg") {
+            ++jpeg_count;
+        }
+    }
+    require(jpeg_count == 2, "recovered save should create one new JPEG");
+
+    std::filesystem::remove_all(output_root);
+}
+
+void test_capture_save_fails_when_temp_path_exists()
+{
+    const auto output_root = std::filesystem::temp_directory_path() / "catcheye_capture_temp_collision_tests";
+    std::filesystem::remove_all(output_root);
+
+    const auto today_dir = today_capture_dir(output_root);
+    std::filesystem::create_directories(today_dir);
+
+    std::ostringstream temp_name;
+    temp_name << ".tmp." << static_cast<long long>(::getpid()) << ".1.jpg";
+    const auto temp_path = today_dir / temp_name.str();
+    write_test_jpeg(temp_path, 64);
+
+    catcheye::capture::CaptureProcessorConfig config;
+    config.capture_dir = output_root.string();
+
+    auto trigger = std::make_unique<FakeTriggerSignal>();
+    auto complete = std::make_unique<FakeCompleteSignal>();
+    auto* trigger_ptr = trigger.get();
+    auto* complete_ptr = complete.get();
+
+    catcheye::capture::CaptureProcessor processor(
+        config,
+        std::move(trigger),
+        std::move(complete));
+    require(processor.initialize(), "processor should initialize");
+
+    trigger_ptr->trigger();
+    processor.process(make_test_frame(), {});
+
+    const auto status = processor.status();
+    require(status.capture_count == 0, "failed temp collision should not count as capture");
+    require(complete_ptr->pulse_count == 0, "failed temp collision should not pulse complete GPIO");
+    require(status.last_error.find("temporary capture path already exists") != std::string::npos, "temp collision error missing");
 
     std::filesystem::remove_all(output_root);
 }
@@ -302,7 +467,84 @@ void test_http_device_info_and_capture_status()
     require(status.find("\"roi_enabled\"") == std::string::npos, "status should not expose ROI flag");
     require(status.find("\"recording_enabled\"") == std::string::npos, "status should not expose recording flag");
 
+    const std::string requested = http_post(18090, "/api/capture/request");
+    require(requested.find("\"capture_requested\":true") != std::string::npos, "manual capture request should be pending");
+
     server.stop();
+    std::filesystem::remove_all(output_root);
+}
+
+void test_http_recording_api()
+{
+    const auto output_root = std::filesystem::temp_directory_path() / "catcheye_capture_recording_tests";
+    std::filesystem::remove_all(output_root);
+
+    catcheye::capture::CaptureProcessorConfig config;
+    config.capture_dir = (output_root / "captures").string();
+    config.recording_dir = (output_root / "recordings").string();
+
+    catcheye::capture::CaptureProcessor processor(
+        config,
+        std::make_unique<FakeTriggerSignal>(),
+        std::make_unique<FakeCompleteSignal>());
+    require(processor.initialize(), "processor should initialize");
+
+    catcheye::capture::HttpApiServer server(
+        {.bind_address = "127.0.0.1", .port = 18091},
+        &processor,
+        nullptr);
+    require(server.start(), "HTTP API server should start");
+
+    const std::string idle = http_get(18091, "/api/recording");
+    require(idle.find("\"state\":\"idle\"") != std::string::npos, "recording should start idle");
+
+    const std::string started = http_post(18091, "/api/recording/start");
+    require(started.find("\"state\":\"recording\"") != std::string::npos, "recording should start");
+
+    processor.process(make_recording_frame(), {});
+
+    const std::string paused = http_post(18091, "/api/recording/pause");
+    require(paused.find("\"state\":\"paused\"") != std::string::npos, "recording should pause");
+
+    const std::string resumed = http_post(18091, "/api/recording/resume");
+    require(resumed.find("\"state\":\"recording\"") != std::string::npos, "recording should resume");
+
+    processor.process(make_recording_frame(), {});
+
+    const std::string saved = http_post(18091, "/api/recording/save");
+    require(saved.find("\"state\":\"idle\"") != std::string::npos, "recording should return idle after save");
+    require(saved.find("\"saved_path\":\"") != std::string::npos, "recording saved path should exist");
+    require(saved.find("\"written_frames\":2") != std::string::npos, "recording frame count mismatch");
+
+    const auto status = processor.recording_status();
+    require(!status.saved_path.empty(), "recording saved path should be stored");
+    require(std::filesystem::exists(status.saved_path), "recording file should exist");
+
+    server.stop();
+    std::filesystem::remove_all(output_root);
+}
+
+void test_recording_start_fails_when_path_exists()
+{
+    const auto output_root = std::filesystem::temp_directory_path() / "catcheye_capture_recording_collision_tests";
+    std::filesystem::remove_all(output_root);
+    std::filesystem::create_directories(output_root);
+
+    wait_for_fresh_second();
+    catcheye::capture::RecordingController first(output_root.string());
+    const auto first_status = first.start();
+    require(first_status.state == catcheye::capture::RecordingState::Recording, "first recording should start");
+    {
+        std::ofstream file(first_status.active_path);
+        file << "existing";
+    }
+
+    catcheye::capture::RecordingController second(output_root.string());
+    const auto second_status = second.start();
+    require(second_status.state == catcheye::capture::RecordingState::Idle, "second recording should stay idle on path collision");
+    require(second_status.error.find("recording path already exists") != std::string::npos, "recording collision error missing");
+
+    first.cancel();
     std::filesystem::remove_all(output_root);
 }
 
@@ -345,8 +587,12 @@ int main()
     test_parse_defaults();
     test_parse_validation();
     test_capture_save_and_sequence();
+    test_capture_sequence_recovers_from_existing_files();
+    test_capture_save_fails_when_temp_path_exists();
     test_capture_metadata_for_viewer();
     test_http_device_info_and_capture_status();
+    test_http_recording_api();
+    test_recording_start_fails_when_path_exists();
     test_busy_trigger_is_ignored();
     std::cout << "capture tests passed\n";
     return 0;

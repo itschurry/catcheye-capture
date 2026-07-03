@@ -25,6 +25,7 @@ struct AppOptions {
     bool complete_active_low = false;
     int complete_pulse_ms = 200;
     std::string capture_dir = "captures";
+    std::string recording_dir = "recordings";
     int jpeg_quality = 95;
 };
 

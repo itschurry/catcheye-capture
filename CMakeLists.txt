@@ -91,6 +91,7 @@ set(CATCHEYE_CAPTURE_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/capture/frame_conversion.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/capture/http_api_server.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/capture/processor.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/capture/recording_controller.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/capture/signal.cpp"
 )
 

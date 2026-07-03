@@ -8,6 +8,7 @@
 
 #include "catcheye/hardware/gpio_signal_config.hpp"
 #include "catcheye/runtime/frame_processor.hpp"
+#include "capture/recording_controller.hpp"
 #include "capture/signal.hpp"
 
 namespace catcheye::capture {
@@ -16,6 +17,7 @@ struct CaptureProcessorConfig {
     std::string capture_dir = "captures";
     int jpeg_quality = 95;
     std::chrono::milliseconds complete_pulse_duration{200};
+    std::string recording_dir = "recordings";
     catcheye::GpioInputConfig trigger_gpio;
     catcheye::GpioSignalConfig complete_gpio;
 };
@@ -48,6 +50,12 @@ class CaptureProcessor final : public catcheye::runtime::FrameProcessor {
     void request_capture();
     CaptureStatus status() const;
     std::string status_json() const;
+    RecordingStatus recording_status() const;
+    RecordingStatus start_recording();
+    RecordingStatus pause_recording();
+    RecordingStatus resume_recording();
+    RecordingStatus save_recording();
+    RecordingStatus cancel_recording();
 
   private:
     std::string build_capture_path_locked();
@@ -57,6 +65,7 @@ class CaptureProcessor final : public catcheye::runtime::FrameProcessor {
     CaptureProcessorConfig config_;
     std::unique_ptr<CaptureTriggerSignal> trigger_signal_;
     std::unique_ptr<CaptureCompleteSignal> complete_signal_;
+    RecordingController recording_controller_;
     mutable std::mutex mutex_;
     bool busy_ = false;
     bool capture_requested_ = false;

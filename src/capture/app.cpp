@@ -44,6 +44,7 @@ void print_usage()
               << "  --complete-active-low       Drive complete GPIO active-low\n"
               << "  --complete-pulse-ms <ms>    Complete signal pulse duration (default: 200)\n"
               << "  --capture-dir <path>        Capture output directory (default: captures)\n"
+              << "  --recording-dir <path>      Viewer recording output directory (default: recordings)\n"
               << "  --jpeg-quality <1-100>      JPEG quality (default: 95)\n"
               << "\n"
               << "Examples:\n"
@@ -151,6 +152,8 @@ AppOptions parse_app_options(int argc, char** argv)
             options.complete_pulse_ms = std::stoi(std::string(read_required_value(args, i, arg)));
         } else if (arg == "--capture-dir") {
             options.capture_dir = read_required_value(args, i, arg);
+        } else if (arg == "--recording-dir") {
+            options.recording_dir = read_required_value(args, i, arg);
         } else if (arg == "--jpeg-quality") {
             options.jpeg_quality = std::stoi(std::string(read_required_value(args, i, arg)));
         } else if (is_input_mode(arg)) {
@@ -213,6 +216,9 @@ AppOptions parse_app_options(int argc, char** argv)
     if (options.capture_dir.empty()) {
         throw std::runtime_error("capture directory must not be empty");
     }
+    if (options.recording_dir.empty()) {
+        throw std::runtime_error("recording directory must not be empty");
+    }
     if (options.jpeg_quality < 1 || options.jpeg_quality > 100) {
         throw std::runtime_error("jpeg quality must be between 1 and 100");
     }
@@ -238,6 +244,7 @@ AppBootstrap build_app_bootstrap(const AppOptions& options)
 {
     AppBootstrap bootstrap;
     bootstrap.processor_config.capture_dir = options.capture_dir;
+    bootstrap.processor_config.recording_dir = options.recording_dir;
     bootstrap.processor_config.jpeg_quality = options.jpeg_quality;
     bootstrap.processor_config.complete_pulse_duration = std::chrono::milliseconds(options.complete_pulse_ms);
     bootstrap.processor_config.trigger_gpio.enabled = options.trigger_gpio >= 0;

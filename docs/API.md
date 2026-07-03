@@ -14,6 +14,13 @@ http://<host>:8090/api
 | --- | --- | --- |
 | `GET` | `/api/device-info` | 앱 식별 정보 조회 |
 | `GET` | `/api/capture/status` | 캡처 런타임 상태 조회 |
+| `POST` | `/api/capture/request` | GPIO 없이 다음 프레임 캡처 요청 |
+| `GET` | `/api/recording` | Viewer 녹화 상태 조회 |
+| `POST` | `/api/recording/start` | Viewer 녹화 시작 |
+| `POST` | `/api/recording/pause` | Viewer 녹화 일시정지 |
+| `POST` | `/api/recording/resume` | Viewer 녹화 재시작 |
+| `POST` | `/api/recording/save` | Viewer 녹화 저장 |
+| `POST` | `/api/recording/cancel` | Viewer 녹화 취소 |
 | `GET` | `/api/rgb-camera/properties` | 지원되는 RGB 카메라 속성 조회 |
 | `PUT` | `/api/rgb-camera/properties/<key>` | RGB 카메라 속성 변경 |
 
@@ -63,10 +70,49 @@ curl http://<host>:8090/api/capture/status
 | `complete_gpio_enabled` | PLC 저장 완료 출력 GPIO 사용 여부 |
 | `busy` | 현재 프레임 저장 처리 중인지 여부 |
 | `capture_requested` | 다음 프레임에서 처리할 캡처 요청이 대기 중인지 여부 |
-| `capture_count` | 저장 성공한 JPEG 개수 |
+| `capture_count` | 현재 프로세스 실행 중 저장 성공한 JPEG 개수 |
 | `ignored_trigger_count` | busy 또는 요청 대기 상태라 무시한 트리거 개수 |
 | `last_saved_path` | 마지막 저장 성공 파일 경로 |
 | `last_error` | 마지막 오류 메시지 |
+
+## `POST /api/capture/request`
+
+```bash
+curl -X POST http://<host>:8090/api/capture/request
+```
+
+GPIO 입력 없이 다음 프레임 저장을 요청한다. 응답은 `GET /api/capture/status`와 같은 JSON이다.
+
+## Recording API
+
+```bash
+curl http://<host>:8090/api/recording
+curl -X POST http://<host>:8090/api/recording/start
+curl -X POST http://<host>:8090/api/recording/pause
+curl -X POST http://<host>:8090/api/recording/resume
+curl -X POST http://<host>:8090/api/recording/save
+curl -X POST http://<host>:8090/api/recording/cancel
+```
+
+응답 예:
+
+```json
+{
+  "state": "recording",
+  "active_path": "/home/user/catcheye-capture/recordings/catcheye_capture_20260703_142530.mp4",
+  "saved_path": "",
+  "error": "",
+  "written_frames": 42
+}
+```
+
+| 필드 | 설명 |
+| --- | --- |
+| `state` | `idle`, `recording`, `paused` 중 하나 |
+| `active_path` | 현재 녹화 중인 MP4 경로 |
+| `saved_path` | 마지막 저장 완료 MP4 경로 |
+| `error` | 마지막 녹화 오류 메시지 |
+| `written_frames` | 현재 녹화에 기록한 프레임 수 |
 
 ## WebSocket metadata
 

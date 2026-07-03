@@ -6,8 +6,11 @@
 #include <iomanip>
 #include <sstream>
 #include <stdexcept>
+#include <string_view>
 #include <utility>
 #include <vector>
+
+#include <unistd.h>
 
 #include <opencv2/imgcodecs.hpp>
 
@@ -52,6 +55,80 @@ std::tm local_time(std::time_t timestamp)
     return tm;
 }
 
+std::string local_date_dir_name(std::chrono::system_clock::time_point time)
+{
+    const std::time_t timestamp = std::chrono::system_clock::to_time_t(time);
+    const std::tm tm = local_time(timestamp);
+
+    std::ostringstream date_dir;
+    date_dir << std::put_time(&tm, "%Y-%m-%d");
+    return date_dir.str();
+}
+
+bool all_digits(std::string_view value)
+{
+    for (const char c : value) {
+        if (c < '0' || c > '9') {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool parse_capture_sequence(const std::filesystem::path& path, std::uint64_t& sequence)
+{
+    if (path.extension() != ".jpg") {
+        return false;
+    }
+
+    const std::string stem = path.stem().string();
+    if (stem.size() != 17U || stem[6] != '_' || stem[10] != '_') {
+        return false;
+    }
+
+    const std::string_view hhmmss(stem.data(), 6U);
+    const std::string_view millis(stem.data() + 7U, 3U);
+    const std::string_view suffix(stem.data() + 11U, 6U);
+    if (!all_digits(hhmmss) || !all_digits(millis) || !all_digits(suffix)) {
+        return false;
+    }
+
+    std::uint64_t parsed = 0;
+    for (const char c : suffix) {
+        parsed = (parsed * 10U) + static_cast<std::uint64_t>(c - '0');
+    }
+    sequence = parsed;
+    return true;
+}
+
+std::uint64_t max_capture_sequence_for_today(const std::filesystem::path& capture_dir)
+{
+    const std::filesystem::path today_dir = capture_dir / local_date_dir_name(std::chrono::system_clock::now());
+    if (!std::filesystem::exists(today_dir)) {
+        return 0;
+    }
+
+    std::uint64_t max_sequence = 0;
+    for (const auto& entry : std::filesystem::directory_iterator(today_dir)) {
+        if (!entry.is_regular_file()) {
+            continue;
+        }
+
+        std::uint64_t sequence = 0;
+        if (parse_capture_sequence(entry.path(), sequence) && sequence > max_sequence) {
+            max_sequence = sequence;
+        }
+    }
+    return max_sequence;
+}
+
+std::filesystem::path build_temp_capture_path(const std::filesystem::path& final_path, std::uint64_t sequence)
+{
+    std::ostringstream filename;
+    filename << ".tmp." << static_cast<long long>(::getpid()) << "." << sequence << ".jpg";
+    return final_path.parent_path() / filename.str();
+}
+
 } // namespace
 
 CaptureProcessor::CaptureProcessor(CaptureProcessorConfig config)
@@ -68,7 +145,8 @@ CaptureProcessor::CaptureProcessor(
     std::unique_ptr<CaptureCompleteSignal> complete_signal)
     : config_(std::move(config)),
       trigger_signal_(std::move(trigger_signal)),
-      complete_signal_(std::move(complete_signal))
+      complete_signal_(std::move(complete_signal)),
+      recording_controller_(config_.recording_dir)
 {
 }
 
@@ -88,6 +166,10 @@ bool CaptureProcessor::initialize()
         set_error_locked("capture directory must not be empty");
         return false;
     }
+    if (config_.recording_dir.empty()) {
+        set_error_locked("recording directory must not be empty");
+        return false;
+    }
     if (config_.jpeg_quality < 1 || config_.jpeg_quality > 100) {
         set_error_locked("jpeg quality must be between 1 and 100");
         return false;
@@ -98,6 +180,7 @@ bool CaptureProcessor::initialize()
     }
 
     std::filesystem::create_directories(config_.capture_dir);
+    sequence_ = max_capture_sequence_for_today(config_.capture_dir);
 
     if (trigger_signal_ != nullptr && !trigger_signal_->initialize([this]() { request_capture(); })) {
         set_error_locked("failed to initialize trigger GPIO input");
@@ -109,7 +192,11 @@ bool CaptureProcessor::initialize()
     }
 
     if (const auto log = logger()) {
-        log->info("CaptureProcessor ready: capture_dir='{}', jpeg_quality={}", config_.capture_dir, config_.jpeg_quality);
+        log->info(
+            "CaptureProcessor ready: capture_dir='{}', jpeg_quality={}, sequence={}",
+            config_.capture_dir,
+            config_.jpeg_quality,
+            sequence_);
     }
     return true;
 }
@@ -173,6 +260,8 @@ catcheye::runtime::ProcessOutput CaptureProcessor::process(
         }
     }
 
+    recording_controller_.write_frame(frame);
+
     catcheye::runtime::ProcessOutput output;
     if (!context.needs_publish) {
         return output;
@@ -206,6 +295,36 @@ std::string CaptureProcessor::status_json() const
     return capture_status_json(status());
 }
 
+RecordingStatus CaptureProcessor::recording_status() const
+{
+    return recording_controller_.status();
+}
+
+RecordingStatus CaptureProcessor::start_recording()
+{
+    return recording_controller_.start();
+}
+
+RecordingStatus CaptureProcessor::pause_recording()
+{
+    return recording_controller_.pause();
+}
+
+RecordingStatus CaptureProcessor::resume_recording()
+{
+    return recording_controller_.resume();
+}
+
+RecordingStatus CaptureProcessor::save_recording()
+{
+    return recording_controller_.save();
+}
+
+RecordingStatus CaptureProcessor::cancel_recording()
+{
+    return recording_controller_.cancel();
+}
+
 std::string CaptureProcessor::build_capture_path_locked()
 {
     const auto now = std::chrono::system_clock::now();
@@ -213,10 +332,7 @@ std::string CaptureProcessor::build_capture_path_locked()
     const std::time_t now_time = std::chrono::system_clock::to_time_t(now);
     const std::tm tm = local_time(now_time);
 
-    std::ostringstream date_dir;
-    date_dir << std::put_time(&tm, "%Y-%m-%d");
-
-    const std::filesystem::path output_dir = std::filesystem::path(config_.capture_dir) / date_dir.str();
+    const std::filesystem::path output_dir = std::filesystem::path(config_.capture_dir) / local_date_dir_name(now);
     std::filesystem::create_directories(output_dir);
 
     ++sequence_;
@@ -237,15 +353,46 @@ bool CaptureProcessor::save_frame_locked(const catcheye::input::Frame& frame, st
         return false;
     }
 
-    saved_path = build_capture_path_locked();
+    const std::filesystem::path final_path = build_capture_path_locked();
+    saved_path = final_path.string();
+    if (std::filesystem::exists(final_path)) {
+        error = "capture path already exists: " + saved_path;
+        return false;
+    }
+
+    const std::filesystem::path temp_path = build_temp_capture_path(final_path, sequence_);
+    if (std::filesystem::exists(temp_path)) {
+        error = "temporary capture path already exists: " + temp_path.string();
+        return false;
+    }
+
     const std::vector<int> params = {
         cv::IMWRITE_JPEG_QUALITY,
         config_.jpeg_quality,
     };
-    if (!cv::imwrite(saved_path, bgr, params)) {
-        error = "failed to write JPEG: " + saved_path;
+    if (!cv::imwrite(temp_path.string(), bgr, params)) {
+        error = "failed to write temporary JPEG: " + temp_path.string();
         return false;
     }
+
+    std::error_code copy_error;
+    const bool copied = std::filesystem::copy_file(
+        temp_path,
+        final_path,
+        std::filesystem::copy_options::none,
+        copy_error);
+
+    std::error_code remove_error;
+    std::filesystem::remove(temp_path, remove_error);
+
+    if (!copied) {
+        error = "failed to promote JPEG without overwrite: " + saved_path;
+        if (copy_error) {
+            error += " (" + copy_error.message() + ")";
+        }
+        return false;
+    }
+
     return true;
 }
 

@@ -9,6 +9,7 @@
 
 #include "catcheye/utils/logger.hpp"
 #include "capture/processor.hpp"
+#include "capture/recording_controller.hpp"
 
 namespace catcheye::capture {
 namespace {
@@ -211,6 +212,11 @@ catcheye::http::HttpResponse put_rgb_camera_property(
     return get_rgb_camera_properties(camera_source);
 }
 
+catcheye::http::HttpResponse recording_response(const RecordingStatus& status)
+{
+    return {200, "OK", recording_status_json(status)};
+}
+
 } // namespace
 
 HttpApiServer::HttpApiServer(
@@ -256,6 +262,14 @@ bool HttpApiServer::start()
         return catcheye::http::HttpResponse{405, "Method Not Allowed", catcheye::http::json_error_body("method not allowed")};
     });
 
+    server_->add_route("/api/capture/request", [this](const catcheye::http::HttpRequest& request) {
+        if (request.method == "POST") {
+            processor_->request_capture();
+            return catcheye::http::HttpResponse{200, "OK", processor_->status_json()};
+        }
+        return catcheye::http::HttpResponse{405, "Method Not Allowed", catcheye::http::json_error_body("method not allowed")};
+    });
+
     server_->add_route("/api/rgb-camera/properties", [this](const catcheye::http::HttpRequest& request) {
         if (request.method == "GET") {
             return get_rgb_camera_properties(camera_source_);
@@ -269,6 +283,48 @@ bool HttpApiServer::start()
         const std::string key = request.path.substr(rgb_camera_property_prefix_size);
         if (request.method == "PUT") {
             return put_rgb_camera_property(camera_source_, key, request.body);
+        }
+        return catcheye::http::HttpResponse{405, "Method Not Allowed", catcheye::http::json_error_body("method not allowed")};
+    });
+
+    server_->add_route("/api/recording", [this](const catcheye::http::HttpRequest& request) {
+        if (request.method == "GET") {
+            return recording_response(processor_->recording_status());
+        }
+        return catcheye::http::HttpResponse{405, "Method Not Allowed", catcheye::http::json_error_body("method not allowed")};
+    });
+
+    server_->add_route("/api/recording/start", [this](const catcheye::http::HttpRequest& request) {
+        if (request.method == "POST") {
+            return recording_response(processor_->start_recording());
+        }
+        return catcheye::http::HttpResponse{405, "Method Not Allowed", catcheye::http::json_error_body("method not allowed")};
+    });
+
+    server_->add_route("/api/recording/pause", [this](const catcheye::http::HttpRequest& request) {
+        if (request.method == "POST") {
+            return recording_response(processor_->pause_recording());
+        }
+        return catcheye::http::HttpResponse{405, "Method Not Allowed", catcheye::http::json_error_body("method not allowed")};
+    });
+
+    server_->add_route("/api/recording/resume", [this](const catcheye::http::HttpRequest& request) {
+        if (request.method == "POST") {
+            return recording_response(processor_->resume_recording());
+        }
+        return catcheye::http::HttpResponse{405, "Method Not Allowed", catcheye::http::json_error_body("method not allowed")};
+    });
+
+    server_->add_route("/api/recording/save", [this](const catcheye::http::HttpRequest& request) {
+        if (request.method == "POST") {
+            return recording_response(processor_->save_recording());
+        }
+        return catcheye::http::HttpResponse{405, "Method Not Allowed", catcheye::http::json_error_body("method not allowed")};
+    });
+
+    server_->add_route("/api/recording/cancel", [this](const catcheye::http::HttpRequest& request) {
+        if (request.method == "POST") {
+            return recording_response(processor_->cancel_recording());
         }
         return catcheye::http::HttpResponse{405, "Method Not Allowed", catcheye::http::json_error_body("method not allowed")};
     });
