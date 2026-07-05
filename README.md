@@ -93,6 +93,13 @@ docker compose -f docker/arm64/docker-compose.dev.yml build
 docker compose -f docker/arm64/docker-compose.dev.yml up -d catcheye-capture-develop-arm64
 ```
 
+amd64 호스트에서 arm64 컨테이너를 빌드하거나 실행하기 전에는 QEMU binfmt를 먼저 등록한다.
+이 작업이 없으면 arm64 이미지 빌드 중 `exec /bin/bash: exec format error`가 난다.
+
+```bash
+docker run --privileged --rm tonistiigi/binfmt --install arm64
+```
+
 컨테이너 빌드:
 
 ```bash
