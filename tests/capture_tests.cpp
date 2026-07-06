@@ -303,11 +303,17 @@ void test_parse_defaults()
     require(options.complete_gpio == -1, "default complete GPIO mismatch");
     require(options.trigger_debounce_ms == 200, "default trigger debounce mismatch");
     require(options.complete_pulse_ms == 200, "default complete pulse mismatch");
+    require(options.heartbeat_led_gpio == 13, "default heartbeat LED GPIO mismatch");
+    require(options.heartbeat_led_interval_ms == 1000, "default heartbeat LED interval mismatch");
 }
 
 void test_parse_validation()
 {
     require(throws_for({"catcheye-capture", "--trigger-gpio", "23", "--complete-gpio", "23"}), "same GPIO lines should be rejected");
+    require(throws_for({"catcheye-capture", "--trigger-gpio", "13"}), "trigger GPIO should not share heartbeat LED line");
+    require(throws_for({"catcheye-capture", "--complete-gpio", "13"}), "complete GPIO should not share heartbeat LED line");
+    require(throws_for({"catcheye-capture", "--heartbeat-led-gpio", "-2"}), "invalid heartbeat LED GPIO should be rejected");
+    require(throws_for({"catcheye-capture", "--heartbeat-led-interval-ms", "0"}), "zero heartbeat LED interval should be rejected");
     require(throws_for({"catcheye-capture", "--trigger-debounce-ms", "-1"}), "negative debounce should be rejected");
     require(throws_for({"catcheye-capture", "--complete-pulse-ms", "-1"}), "negative pulse should be rejected");
     require(throws_for({"catcheye-capture", "--jpeg-quality", "0"}), "low JPEG quality should be rejected");
@@ -317,6 +323,10 @@ void test_parse_validation()
     auto options = parse({"catcheye-capture", "--ws", "8099"});
     require(options.websocket_enabled, "websocket should be enabled");
     require(options.websocket_port == 8099, "websocket port mismatch");
+    auto led_options = parse({"catcheye-capture", "--heartbeat-led-gpio", "12", "--heartbeat-led-active-low", "--heartbeat-led-interval-ms", "250"});
+    require(led_options.heartbeat_led_gpio == 12, "heartbeat LED GPIO option mismatch");
+    require(led_options.heartbeat_led_active_low, "heartbeat LED active-low option mismatch");
+    require(led_options.heartbeat_led_interval_ms == 250, "heartbeat LED interval option mismatch");
 }
 
 void test_capture_save_and_sequence()

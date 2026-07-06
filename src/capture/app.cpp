@@ -1,5 +1,6 @@
 #include "capture/app.hpp"
 
+#include <atomic>
 #include <chrono>
 #include <iostream>
 #include <memory>
@@ -7,7 +8,10 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <thread>
+#include <utility>
 
+#include "catcheye/hardware/gpio_signal.hpp"
 #include "catcheye/runtime/frame_processing_runner.hpp"
 #include "catcheye/transport/websocket_publisher.hpp"
 #include "catcheye/utils/logger.hpp"
@@ -43,13 +47,16 @@ void print_usage()
               << "  --complete-gpio <line>      PLC capture-complete GPIO output line\n"
               << "  --complete-active-low       Drive complete GPIO active-low\n"
               << "  --complete-pulse-ms <ms>    Complete signal pulse duration (default: 200)\n"
+              << "  --heartbeat-led-gpio <line>       Runtime heartbeat LED GPIO output line (default: 13)\n"
+              << "  --heartbeat-led-active-low        Drive runtime heartbeat LED active-low\n"
+              << "  --heartbeat-led-interval-ms <ms>  Runtime heartbeat LED blink interval (default: 1000)\n"
               << "  --capture-dir <path>        Capture output directory (default: captures)\n"
               << "  --recording-dir <path>      Viewer recording output directory (default: recordings)\n"
               << "  --jpeg-quality <1-100>      JPEG quality (default: 95)\n"
               << "\n"
               << "Examples:\n"
-              << "  catcheye-capture --camera --ws --trigger-gpio 23 --complete-gpio 24\n"
-              << "  catcheye-capture --image samples/frame.jpg --ws --trigger-gpio 23 --complete-gpio 24\n";
+              << "  catcheye-capture --camera --ws --trigger-gpio 23 --complete-gpio 24 --heartbeat-led-gpio 13\n"
+              << "  catcheye-capture --image samples/frame.jpg --ws --trigger-gpio 23 --complete-gpio 24 --heartbeat-led-gpio 13\n";
 }
 
 std::string_view read_required_value(std::span<char* const> args, std::size_t& index, std::string_view flag)
@@ -85,6 +92,59 @@ bool is_input_mode(std::string_view arg)
 {
     return arg == "--image" || arg == "--video" || arg == "--camera";
 }
+
+class HeartbeatLedBlinker {
+  public:
+    HeartbeatLedBlinker(catcheye::GpioSignalConfig config, std::chrono::milliseconds interval)
+        : enabled_(config.enabled),
+          signal_(std::move(config)),
+          interval_(interval) {}
+
+    ~HeartbeatLedBlinker()
+    {
+        stop();
+    }
+
+    HeartbeatLedBlinker(const HeartbeatLedBlinker&) = delete;
+    HeartbeatLedBlinker& operator=(const HeartbeatLedBlinker&) = delete;
+
+    bool start()
+    {
+        if (!enabled_) {
+            return true;
+        }
+        if (!signal_.initialize()) {
+            return false;
+        }
+
+        worker_ = std::thread([this]() {
+            bool active = false;
+            while (!stop_requested_.load()) {
+                active = !active;
+                signal_.set_state(active);
+                std::this_thread::sleep_for(interval_);
+            }
+            signal_.set_state(false);
+        });
+        return true;
+    }
+
+    void stop()
+    {
+        stop_requested_.store(true);
+        if (worker_.joinable()) {
+            worker_.join();
+        }
+        signal_.shutdown();
+    }
+
+  private:
+    bool enabled_ = false;
+    catcheye::hardware::GpioStateSignal signal_;
+    std::chrono::milliseconds interval_;
+    std::atomic_bool stop_requested_{false};
+    std::thread worker_;
+};
 
 } // namespace
 
@@ -150,6 +210,12 @@ AppOptions parse_app_options(int argc, char** argv)
             options.complete_active_low = true;
         } else if (arg == "--complete-pulse-ms") {
             options.complete_pulse_ms = std::stoi(std::string(read_required_value(args, i, arg)));
+        } else if (arg == "--heartbeat-led-gpio") {
+            options.heartbeat_led_gpio = std::stoi(std::string(read_required_value(args, i, arg)));
+        } else if (arg == "--heartbeat-led-active-low") {
+            options.heartbeat_led_active_low = true;
+        } else if (arg == "--heartbeat-led-interval-ms") {
+            options.heartbeat_led_interval_ms = std::stoi(std::string(read_required_value(args, i, arg)));
         } else if (arg == "--capture-dir") {
             options.capture_dir = read_required_value(args, i, arg);
         } else if (arg == "--recording-dir") {
@@ -204,14 +270,26 @@ AppOptions parse_app_options(int argc, char** argv)
     if (options.complete_gpio < -1) {
         throw std::runtime_error("complete GPIO line must be -1 or a non-negative integer");
     }
+    if (options.heartbeat_led_gpio < -1) {
+        throw std::runtime_error("heartbeat LED GPIO line must be -1 or a non-negative integer");
+    }
     if (options.trigger_debounce_ms < 0) {
         throw std::runtime_error("trigger debounce must be zero or a positive integer");
     }
     if (options.complete_pulse_ms < 0) {
         throw std::runtime_error("complete pulse duration must be zero or a positive integer");
     }
+    if (options.heartbeat_led_interval_ms <= 0) {
+        throw std::runtime_error("heartbeat LED interval must be a positive integer");
+    }
     if (options.trigger_gpio >= 0 && options.complete_gpio >= 0 && options.trigger_gpio == options.complete_gpio) {
         throw std::runtime_error("trigger GPIO and complete GPIO must use different lines");
+    }
+    if (options.heartbeat_led_gpio >= 0 && options.trigger_gpio >= 0 && options.heartbeat_led_gpio == options.trigger_gpio) {
+        throw std::runtime_error("heartbeat LED GPIO and trigger GPIO must use different lines");
+    }
+    if (options.heartbeat_led_gpio >= 0 && options.complete_gpio >= 0 && options.heartbeat_led_gpio == options.complete_gpio) {
+        throw std::runtime_error("heartbeat LED GPIO and complete GPIO must use different lines");
     }
     if (options.capture_dir.empty()) {
         throw std::runtime_error("capture directory must not be empty");
@@ -258,6 +336,12 @@ AppBootstrap build_app_bootstrap(const AppOptions& options)
     bootstrap.processor_config.complete_gpio.line = options.complete_gpio;
     bootstrap.processor_config.complete_gpio.active_low = options.complete_active_low;
     bootstrap.processor_config.complete_gpio.consumer = "catcheye-capture-complete";
+    bootstrap.heartbeat_led_config.enabled = options.heartbeat_led_gpio >= 0;
+    bootstrap.heartbeat_led_config.chip_path = options.gpio_chip_path;
+    bootstrap.heartbeat_led_config.line = options.heartbeat_led_gpio;
+    bootstrap.heartbeat_led_config.active_low = options.heartbeat_led_active_low;
+    bootstrap.heartbeat_led_config.consumer = "catcheye-capture-heartbeat-led";
+    bootstrap.heartbeat_led_interval = std::chrono::milliseconds(options.heartbeat_led_interval_ms);
     bootstrap.runtime_config.process_every_n_frames = 1;
     bootstrap.websocket_enabled = options.websocket_enabled;
     bootstrap.websocket_publisher_config.port = options.websocket_port;
@@ -299,6 +383,19 @@ int run_app(int argc, char** argv)
                 bootstrap.processor_config.complete_gpio.active_low,
                 bootstrap.processor_config.complete_pulse_duration.count());
         }
+        if (bootstrap.heartbeat_led_config.enabled) {
+            log->info(
+                "heartbeat LED enabled: chip='{}', line={}, active_low={}, interval_ms={}",
+                bootstrap.heartbeat_led_config.chip_path,
+                bootstrap.heartbeat_led_config.line,
+                bootstrap.heartbeat_led_config.active_low,
+                bootstrap.heartbeat_led_interval.count());
+        }
+    }
+
+    HeartbeatLedBlinker heartbeat_led(bootstrap.heartbeat_led_config, bootstrap.heartbeat_led_interval);
+    if (!heartbeat_led.start()) {
+        throw std::runtime_error("failed to initialize heartbeat LED GPIO output");
     }
 
     auto processor = std::make_unique<CaptureProcessor>(std::move(bootstrap.processor_config));

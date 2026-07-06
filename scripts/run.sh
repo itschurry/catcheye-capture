@@ -8,6 +8,7 @@ RECORDING_DIR="${CATCHEYE_CAPTURE_RECORDING_DIR:-/home/user/catcheye-capture/rec
 GPIO_CHIP="${CATCHEYE_CAPTURE_GPIO_CHIP:-/dev/gpiochip4}"
 TRIGGER_GPIO="${CATCHEYE_CAPTURE_TRIGGER_GPIO:-23}"
 COMPLETE_GPIO="${CATCHEYE_CAPTURE_COMPLETE_GPIO:-24}"
+HEARTBEAT_LED_GPIO="${CATCHEYE_CAPTURE_HEARTBEAT_LED_GPIO:-13}"
 
 exec "$CATCHEYE_CAPTURE_PATH/bin/catcheye-capture" \
   --camera \
@@ -16,5 +17,6 @@ exec "$CATCHEYE_CAPTURE_PATH/bin/catcheye-capture" \
   --gpio-chip "$GPIO_CHIP" \
   --trigger-gpio "$TRIGGER_GPIO" \
   --complete-gpio "$COMPLETE_GPIO" \
+  --heartbeat-led-gpio "$HEARTBEAT_LED_GPIO" \
   --capture-dir "$CAPTURE_DIR" \
   --recording-dir "$RECORDING_DIR"

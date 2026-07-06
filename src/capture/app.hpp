@@ -1,8 +1,10 @@
 #pragma once
 
+#include <chrono>
 #include <memory>
 #include <string>
 
+#include "catcheye/hardware/gpio_signal_config.hpp"
 #include "catcheye/input/frame_source.hpp"
 #include "catcheye/runtime/frame_processing_runner.hpp"
 #include "catcheye/transport/websocket_publisher.hpp"
@@ -24,6 +26,9 @@ struct AppOptions {
     int complete_gpio = -1;
     bool complete_active_low = false;
     int complete_pulse_ms = 200;
+    int heartbeat_led_gpio = 13;
+    bool heartbeat_led_active_low = false;
+    int heartbeat_led_interval_ms = 1000;
     std::string capture_dir = "captures";
     std::string recording_dir = "recordings";
     int jpeg_quality = 95;
@@ -35,6 +40,8 @@ struct AppBootstrap {
     bool websocket_enabled = false;
     catcheye::transport::WebSocketPublisherConfig websocket_publisher_config;
     HttpApiServerConfig http_api_server_config;
+    catcheye::GpioSignalConfig heartbeat_led_config;
+    std::chrono::milliseconds heartbeat_led_interval{1000};
     std::unique_ptr<catcheye::input::FrameSource> source;
 };
 
