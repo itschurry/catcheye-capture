@@ -1,0 +1,19 @@
+{
+  "ae-enable": true,
+  "ae-metering-mode": "centre-weighted",
+  "ae-flicker-period": 0,
+  "exposure-time-mode": "auto",
+  "exposure-time": 0,
+  "exposure-value": 0.0,
+  "analogue-gain-mode": "auto",
+  "analogue-gain": 1.0,
+  "awb-enable": true,
+  "awb-mode": "auto",
+  "af-mode": "auto",
+  "lens-position": 0.0,
+  "brightness": 0.0,
+  "contrast": 1.0,
+  "saturation": 1.0,
+  "sharpness": 1.0,
+  "gamma": 1.0
+}

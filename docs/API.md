@@ -26,7 +26,7 @@ http://<host>:8090/api
 | `POST` | `/api/recording/save` | Viewer 녹화 저장 |
 | `POST` | `/api/recording/cancel` | Viewer 녹화 취소 |
 | `GET` | `/api/rgb-camera/properties` | 지원되는 RGB 카메라 속성 조회 |
-| `PUT` | `/api/rgb-camera/properties/<key>` | RGB 카메라 속성 변경 |
+| `PUT` | `/api/rgb-camera/properties/<key>` | RGB 카메라 속성 변경과 config 저장 |
 
 ## `GET /api/device-info`
 
@@ -197,6 +197,20 @@ curl http://<host>:8090/api/rgb-camera/properties
 
 응답은 현재 카메라 소스가 노출하는 속성만 JSON 객체로 반환한다.
 
+앱 시작 시 `--camera-properties` JSON 파일을 먼저 파싱하고, 카메라 source가 열린 뒤 같은 속성을 적용한다. 파일이 JSON object가 아니면 카메라를 열기 전에 실패한다. 기본 파일은 Studio에서 조절하는 전체 RGB property key를 포함한다.
+
+```json
+{
+  "ae-enable": false,
+  "exposure-time-mode": "manual",
+  "exposure-time": 12000,
+  "analogue-gain-mode": "manual",
+  "analogue-gain": 1.5,
+  "awb-enable": true,
+  "awb-mode": "auto"
+}
+```
+
 ## `PUT /api/rgb-camera/properties/<key>`
 
 ```bash
@@ -205,6 +219,8 @@ curl -X PUT \
   -d '{"value": false}' \
   http://<host>:8090/api/rgb-camera/properties/ae-enable
 ```
+
+성공하면 실행 중인 카메라에 즉시 적용하고 `--camera-properties` JSON 파일에도 저장한다. GStreamer 적용이나 파일 저장이 실패하면 `500`을 반환한다.
 
 지원 키:
 

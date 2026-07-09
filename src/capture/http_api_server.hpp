@@ -20,7 +20,8 @@ class HttpApiServer {
     HttpApiServer(
         HttpApiServerConfig config,
         CaptureProcessor* processor,
-        catcheye::input::FrameSource* camera_source);
+        catcheye::input::FrameSource* camera_source,
+        std::string camera_properties_path);
     ~HttpApiServer();
 
     bool start();
@@ -28,6 +29,7 @@ class HttpApiServer {
 
   private:
     HttpApiServerConfig config_;
+    std::string camera_properties_path_;
     CaptureProcessor* processor_ = nullptr;
     catcheye::input::FrameSource* camera_source_ = nullptr;
     std::unique_ptr<catcheye::http::HttpServer> server_;

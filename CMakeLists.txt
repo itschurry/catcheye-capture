@@ -88,6 +88,7 @@ set(CATCHEYE_CAPTURE_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/logger.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/hardware/gpio_signal.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/capture/app.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/capture/camera_properties.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/capture/frame_conversion.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/capture/http_api_server.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/capture/processor.cpp"
@@ -287,6 +288,13 @@ install(DIRECTORY ${CATCHEYE_VISION_SDK_SOURCE_DIR}/libs/vision-http/include/
 install(PROGRAMS
     scripts/run.sh
     DESTINATION scripts
+)
+
+install(
+    DIRECTORY config
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/..
+    PATTERN "__pycache__" EXCLUDE
+    PATTERN "*.pyc" EXCLUDE
 )
 
 install(FILES scripts/catcheye-capture.service

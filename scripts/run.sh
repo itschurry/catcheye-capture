@@ -5,6 +5,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 CATCHEYE_CAPTURE_PATH="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 CAPTURE_DIR="${CATCHEYE_CAPTURE_DIR:-/home/user/catcheye-capture/captures}"
 RECORDING_DIR="${CATCHEYE_CAPTURE_RECORDING_DIR:-/home/user/catcheye-capture/recordings}"
+CAMERA_PROPERTIES="${CATCHEYE_CAPTURE_CAMERA_PROPERTIES:-$CATCHEYE_CAPTURE_PATH/config/camera_properties.json}"
 GPIO_CHIP="${CATCHEYE_CAPTURE_GPIO_CHIP:-/dev/gpiochip4}"
 TRIGGER_GPIO="${CATCHEYE_CAPTURE_TRIGGER_GPIO:-23}"
 COMPLETE_GPIO="${CATCHEYE_CAPTURE_COMPLETE_GPIO:-24}"
@@ -19,4 +20,5 @@ exec "$CATCHEYE_CAPTURE_PATH/bin/catcheye-capture" \
   --complete-gpio "$COMPLETE_GPIO" \
   --heartbeat-led-gpio "$HEARTBEAT_LED_GPIO" \
   --capture-dir "$CAPTURE_DIR" \
-  --recording-dir "$RECORDING_DIR"
+  --recording-dir "$RECORDING_DIR" \
+  --camera-properties "$CAMERA_PROPERTIES"

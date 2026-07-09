@@ -296,6 +296,7 @@ void test_parse_defaults()
     require(options.http_port == 8090, "default HTTP port mismatch");
     require(options.capture_dir == "captures", "default capture dir mismatch");
     require(options.recording_dir == "recordings", "default recording dir mismatch");
+    require(options.camera_properties_path == "config/camera_properties.json", "default camera properties path mismatch");
     require(options.jpeg_quality == 95, "default JPEG quality mismatch");
     require(!options.websocket_enabled, "websocket should be disabled by default");
     require(options.websocket_port == 8080, "default websocket port mismatch");
@@ -319,10 +320,13 @@ void test_parse_validation()
     require(throws_for({"catcheye-capture", "--jpeg-quality", "0"}), "low JPEG quality should be rejected");
     require(throws_for({"catcheye-capture", "--jpeg-quality", "101"}), "high JPEG quality should be rejected");
     require(throws_for({"catcheye-capture", "--recording-dir", ""}), "empty recording dir should be rejected");
+    require(throws_for({"catcheye-capture", "--camera-properties", ""}), "empty camera properties path should be rejected");
     require(throws_for({"catcheye-capture", "--ws", "-1"}), "negative websocket port should be rejected");
     auto options = parse({"catcheye-capture", "--ws", "8099"});
     require(options.websocket_enabled, "websocket should be enabled");
     require(options.websocket_port == 8099, "websocket port mismatch");
+    options = parse({"catcheye-capture", "--camera-properties", "config/custom_camera.json"});
+    require(options.camera_properties_path == "config/custom_camera.json", "camera properties path mismatch");
     auto led_options = parse({"catcheye-capture", "--heartbeat-led-gpio", "12", "--heartbeat-led-active-low", "--heartbeat-led-interval-ms", "250"});
     require(led_options.heartbeat_led_gpio == 12, "heartbeat LED GPIO option mismatch");
     require(led_options.heartbeat_led_active_low, "heartbeat LED active-low option mismatch");

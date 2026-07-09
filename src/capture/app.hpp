@@ -31,6 +31,7 @@ struct AppOptions {
     int heartbeat_led_interval_ms = 1000;
     std::string capture_dir = "captures";
     std::string recording_dir = "recordings";
+    std::string camera_properties_path = "config/camera_properties.json";
     int jpeg_quality = 95;
 };
 

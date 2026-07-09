@@ -2,8 +2,11 @@
 
 #include <atomic>
 #include <chrono>
+#include <exception>
+#include <filesystem>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -15,6 +18,7 @@
 #include "catcheye/runtime/frame_processing_runner.hpp"
 #include "catcheye/transport/websocket_publisher.hpp"
 #include "catcheye/utils/logger.hpp"
+#include "capture/camera_properties.hpp"
 
 namespace catcheye::capture {
 namespace {
@@ -52,6 +56,7 @@ void print_usage()
               << "  --heartbeat-led-interval-ms <ms>  Runtime heartbeat LED blink interval (default: 1000)\n"
               << "  --capture-dir <path>        Capture output directory (default: captures)\n"
               << "  --recording-dir <path>      Viewer recording output directory (default: recordings)\n"
+              << "  --camera-properties <path>  RGB camera properties JSON path (default: config/camera_properties.json)\n"
               << "  --jpeg-quality <1-100>      JPEG quality (default: 95)\n"
               << "\n"
               << "Examples:\n"
@@ -91,6 +96,28 @@ std::string describe_runtime_mode(const AppOptions& options)
 bool is_input_mode(std::string_view arg)
 {
     return arg == "--image" || arg == "--video" || arg == "--camera";
+}
+
+std::string resolve_default_config_path(const char* executable_path, const std::string& relative_path)
+{
+    namespace fs = std::filesystem;
+
+    std::vector<fs::path> candidates;
+    if (executable_path != nullptr && *executable_path != '\0') {
+        const fs::path executable = fs::absolute(executable_path);
+        const fs::path executable_dir = executable.parent_path();
+        candidates.emplace_back(executable_dir / ".." / "config" / relative_path);
+        candidates.emplace_back(executable_dir / "config" / relative_path);
+    }
+    candidates.emplace_back(fs::current_path() / "config" / relative_path);
+
+    for (const fs::path& candidate : candidates) {
+        if (fs::exists(candidate)) {
+            return candidate.lexically_normal().string();
+        }
+    }
+
+    return (fs::current_path() / "config" / relative_path).lexically_normal().string();
 }
 
 class HeartbeatLedBlinker {
@@ -144,6 +171,49 @@ class HeartbeatLedBlinker {
     std::chrono::milliseconds interval_;
     std::atomic_bool stop_requested_{false};
     std::thread worker_;
+};
+
+class CameraPropertiesFrameSource final : public catcheye::input::FrameSource {
+  public:
+    CameraPropertiesFrameSource(
+        std::unique_ptr<catcheye::input::FrameSource> inner,
+        CameraPropertyMap properties,
+        std::string properties_path)
+        : inner_(std::move(inner)),
+          properties_(std::move(properties)),
+          properties_path_(std::move(properties_path)) {}
+
+    bool open() override
+    {
+        if (!inner_->open()) {
+            return false;
+        }
+        std::string error;
+        if (!apply_camera_properties(*inner_, properties_, error)) {
+            std::cerr << error << " from '" << properties_path_ << "'\n";
+            inner_->close();
+            return false;
+        }
+        return true;
+    }
+
+    bool is_open() const override { return inner_->is_open(); }
+    catcheye::input::FrameReadStatus read(catcheye::input::Frame& frame) override { return inner_->read(frame); }
+    void close() override { inner_->close(); }
+    std::string describe() const override { return inner_->describe() + " + camera-properties:" + properties_path_; }
+    std::optional<std::string> property_json(std::string_view key) const override { return inner_->property_json(key); }
+    bool set_bool_property(std::string_view key, bool value) override { return inner_->set_bool_property(key, value); }
+    bool set_int_property(std::string_view key, int value) override { return inner_->set_int_property(key, value); }
+    bool set_float_property(std::string_view key, float value) override { return inner_->set_float_property(key, value); }
+    bool set_string_property(std::string_view key, std::string_view value) override
+    {
+        return inner_->set_string_property(key, value);
+    }
+
+  private:
+    std::unique_ptr<catcheye::input::FrameSource> inner_;
+    CameraPropertyMap properties_;
+    std::string properties_path_;
 };
 
 } // namespace
@@ -220,6 +290,8 @@ AppOptions parse_app_options(int argc, char** argv)
             options.capture_dir = read_required_value(args, i, arg);
         } else if (arg == "--recording-dir") {
             options.recording_dir = read_required_value(args, i, arg);
+        } else if (arg == "--camera-properties") {
+            options.camera_properties_path = read_required_value(args, i, arg);
         } else if (arg == "--jpeg-quality") {
             options.jpeg_quality = std::stoi(std::string(read_required_value(args, i, arg)));
         } else if (is_input_mode(arg)) {
@@ -297,6 +369,9 @@ AppOptions parse_app_options(int argc, char** argv)
     if (options.recording_dir.empty()) {
         throw std::runtime_error("recording directory must not be empty");
     }
+    if (options.camera_properties_path.empty()) {
+        throw std::runtime_error("camera properties path must not be empty");
+    }
     if (options.jpeg_quality < 1 || options.jpeg_quality > 100) {
         throw std::runtime_error("jpeg quality must be between 1 and 100");
     }
@@ -347,15 +422,25 @@ AppBootstrap build_app_bootstrap(const AppOptions& options)
     bootstrap.websocket_publisher_config.port = options.websocket_port;
     bootstrap.http_api_server_config.port = options.http_port;
     bootstrap.source = catcheye::input::create_frame_source(options.input);
+    if (options.input.type == catcheye::input::InputSourceType::Camera) {
+        CameraPropertyMap camera_properties = load_camera_properties_file(options.camera_properties_path);
+        bootstrap.source = std::make_unique<CameraPropertiesFrameSource>(
+            std::move(bootstrap.source),
+            std::move(camera_properties),
+            options.camera_properties_path);
+    }
     return bootstrap;
 }
 
 int run_app(int argc, char** argv)
 {
-    const AppOptions options = parse_app_options(argc, argv);
+    AppOptions options = parse_app_options(argc, argv);
     if (options.show_help) {
         print_usage();
         return 0;
+    }
+    if (options.camera_properties_path == "config/camera_properties.json") {
+        options.camera_properties_path = resolve_default_config_path(argv[0], "camera_properties.json");
     }
 
     AppBootstrap bootstrap = build_app_bootstrap(options);
@@ -367,6 +452,7 @@ int run_app(int argc, char** argv)
             bootstrap.processor_config.capture_dir,
             bootstrap.http_api_server_config.port,
             bootstrap.websocket_publisher_config.port);
+        log->info("RGB camera properties config: '{}'", options.camera_properties_path);
         if (bootstrap.processor_config.trigger_gpio.enabled) {
             log->info(
                 "trigger GPIO enabled: chip='{}', line={}, active_low={}, debounce_ms={}",
@@ -404,7 +490,8 @@ int run_app(int argc, char** argv)
     auto http_api_server = std::make_unique<HttpApiServer>(
         bootstrap.http_api_server_config,
         processor_ptr,
-        camera_source_ptr);
+        camera_source_ptr,
+        options.camera_properties_path);
     if (!http_api_server->start()) {
         throw std::runtime_error("failed to start HTTP API server");
     }
