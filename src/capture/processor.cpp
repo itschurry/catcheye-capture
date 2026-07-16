@@ -1,6 +1,8 @@
 #include "capture/processor.hpp"
 
+#include <cerrno>
 #include <chrono>
+#include <cstring>
 #include <ctime>
 #include <filesystem>
 #include <iomanip>
@@ -10,6 +12,7 @@
 #include <utility>
 #include <vector>
 
+#include <fcntl.h>
 #include <unistd.h>
 
 #include <opencv2/imgcodecs.hpp>
@@ -127,6 +130,35 @@ std::filesystem::path build_temp_capture_path(const std::filesystem::path& final
     std::ostringstream filename;
     filename << ".tmp." << static_cast<long long>(::getpid()) << "." << sequence << ".jpg";
     return final_path.parent_path() / filename.str();
+}
+
+bool sync_path(const std::filesystem::path& path, int flags, std::string& error)
+{
+    const int fd = ::open(path.c_str(), flags | O_CLOEXEC);
+    if (fd < 0) {
+        error = "failed to open path for sync: " + path.string() + " (" + std::strerror(errno) + ")";
+        return false;
+    }
+
+    if (::fsync(fd) != 0) {
+        const int sync_errno = errno;
+        ::close(fd);
+        error = "failed to sync path: " + path.string() + " (" + std::strerror(sync_errno) + ")";
+        return false;
+    }
+
+    if (::close(fd) != 0) {
+        error = "failed to close synced path: " + path.string() + " (" + std::strerror(errno) + ")";
+        return false;
+    }
+
+    return true;
+}
+
+void remove_file(const std::filesystem::path& path)
+{
+    std::error_code ignored;
+    std::filesystem::remove(path, ignored);
 }
 
 } // namespace
@@ -380,21 +412,37 @@ bool CaptureProcessor::save_frame_locked(const catcheye::input::Frame& frame, st
         return false;
     }
 
-    std::error_code copy_error;
-    const bool copied = std::filesystem::copy_file(
-        temp_path,
-        final_path,
-        std::filesystem::copy_options::none,
-        copy_error);
-
-    std::error_code remove_error;
-    std::filesystem::remove(temp_path, remove_error);
-
-    if (!copied) {
-        error = "failed to promote JPEG without overwrite: " + saved_path;
-        if (copy_error) {
-            error += " (" + copy_error.message() + ")";
+    std::error_code size_error;
+    const std::uintmax_t temp_size = std::filesystem::file_size(temp_path, size_error);
+    if (size_error || temp_size == 0) {
+        remove_file(temp_path);
+        error = "temporary JPEG is empty or unreadable: " + temp_path.string();
+        if (size_error) {
+            error += " (" + size_error.message() + ")";
         }
+        return false;
+    }
+
+    if (cv::imread(temp_path.string(), cv::IMREAD_UNCHANGED).empty()) {
+        remove_file(temp_path);
+        error = "temporary JPEG cannot be decoded: " + temp_path.string();
+        return false;
+    }
+
+    if (!sync_path(temp_path, O_RDONLY, error)) {
+        remove_file(temp_path);
+        return false;
+    }
+
+    std::error_code rename_error;
+    std::filesystem::rename(temp_path, final_path, rename_error);
+    if (rename_error) {
+        remove_file(temp_path);
+        error = "failed to promote JPEG: " + saved_path + " (" + rename_error.message() + ")";
+        return false;
+    }
+
+    if (!sync_path(final_path.parent_path(), O_RDONLY | O_DIRECTORY, error)) {
         return false;
     }
 

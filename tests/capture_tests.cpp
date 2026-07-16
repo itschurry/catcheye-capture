@@ -365,6 +365,7 @@ void test_capture_save_and_sequence()
     require(complete_ptr->pulse_count == 2, "complete pulse count mismatch");
     require(complete_ptr->last_duration == std::chrono::milliseconds(7), "complete pulse duration mismatch");
     require(std::filesystem::exists(status.last_saved_path), "last saved JPEG should exist");
+    require(std::filesystem::file_size(status.last_saved_path) > 0, "saved JPEG should not be empty");
     require(status.last_saved_path.find(".jpg") != std::string::npos, "saved path should be a JPEG");
     require(std::filesystem::path(status.last_saved_path).parent_path().filename().string().size() == 10, "date directory name mismatch");
 
@@ -411,6 +412,7 @@ void test_capture_sequence_recovers_from_existing_files()
     require(ends_with(status.last_saved_path, "_000008.jpg"), "saved sequence should continue after existing files");
     require(std::filesystem::exists(existing_path), "existing JPEG should remain");
     require(std::filesystem::file_size(existing_path) == existing_size, "existing JPEG should not be overwritten");
+    require(std::filesystem::file_size(status.last_saved_path) > 0, "saved JPEG should not be empty");
     require(cv::imread(status.last_saved_path).empty() == false, "saved JPEG should be readable");
     require(count_files_with_prefix(output_root, ".tmp.") == 0, "temporary JPEG should be removed");
 
@@ -512,7 +514,8 @@ void test_http_device_info_and_capture_status()
     catcheye::capture::HttpApiServer server(
         {.bind_address = "127.0.0.1", .port = 18090},
         &processor,
-        nullptr);
+        nullptr,
+        "");
     require(server.start(), "HTTP API server should start");
 
     const std::string device_info = http_get(18090, "/api/device-info");
@@ -556,7 +559,8 @@ void test_http_recording_api()
     catcheye::capture::HttpApiServer server(
         {.bind_address = "127.0.0.1", .port = 18091},
         &processor,
-        nullptr);
+        nullptr,
+        "");
     require(server.start(), "HTTP API server should start");
 
     const std::string idle = http_get(18091, "/api/recording");
@@ -617,7 +621,8 @@ void test_http_capture_image_api()
     catcheye::capture::HttpApiServer server(
         {.bind_address = "127.0.0.1", .port = 18092},
         &processor,
-        nullptr);
+        nullptr,
+        "");
     require(server.start(), "HTTP API server should start");
 
     const std::string dates = http_get(18092, "/api/captures/dates");

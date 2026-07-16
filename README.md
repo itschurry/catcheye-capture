@@ -168,6 +168,8 @@ CATCHEYE_CAPTURE_HEARTBEAT_LED_GPIO=13 \
 ./install/release/scripts/run.sh
 ```
 
+`run.sh`는 카메라 영상을 `vertical-flip`으로 보정하고 저장 완료 GPIO 펄스를 `1000ms`로 출력한다.
+
 이미지 파일 입력 테스트:
 
 ```bash
@@ -236,7 +238,7 @@ captures/
 
 파일명은 `HHMMSS_mmm_NNNNNN.jpg` 형식이다. 앱 시작 시 오늘 날짜 디렉터리의 기존 JPEG를 스캔해서 가장 큰 `NNNNNN` 다음 번호부터 저장한다. 앱이나 카메라 런타임이 재시작돼도 같은 날짜 안에서는 sequence를 0부터 다시 쓰지 않는다.
 
-기존 최종 JPEG 경로가 이미 있으면 덮어쓰지 않고 저장 실패로 처리한다. JPEG는 같은 디렉터리의 `.tmp.<pid>.<sequence>.jpg` 임시 파일로 먼저 쓴 뒤 최종 경로로 승격하고, 성공 후 임시 파일을 삭제한다.
+기존 최종 JPEG 경로가 이미 있으면 덮어쓰지 않고 저장 실패로 처리한다. JPEG는 같은 디렉터리의 `.tmp.<pid>.<sequence>.jpg` 임시 파일로 먼저 쓴다. 파일 크기와 JPEG 디코딩을 검증하고 파일을 디스크에 동기화한 뒤 최종 경로로 원자적으로 이름을 바꾼다. 최종 디렉터리 동기화까지 성공해야 저장 완료로 처리하고 PLC 완료 신호를 출력한다.
 
 동시에 트리거가 들어오면 큐를 만들지 않는다. 저장 중이거나 이미 요청이 대기 중이면 해당 트리거는 무시하고 `ignored_trigger_count`만 증가한다.
 

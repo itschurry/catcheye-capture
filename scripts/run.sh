@@ -13,11 +13,12 @@ HEARTBEAT_LED_GPIO="${CATCHEYE_CAPTURE_HEARTBEAT_LED_GPIO:-13}"
 
 exec "$CATCHEYE_CAPTURE_PATH/bin/catcheye-capture" \
   --camera \
-  --camera-pipeline "libcamerasrc ! video/x-raw,width=2304,height=1296,framerate=15/1,format=NV12 ! queue leaky=downstream max-size-buffers=1 ! videoflip method=rotate-180" \
+  --camera-pipeline "libcamerasrc ! video/x-raw,width=2304,height=1296,framerate=15/1,format=NV12 ! queue leaky=downstream max-size-buffers=1 ! videoflip method=vertical-flip" \
   --ws \
   --gpio-chip "$GPIO_CHIP" \
   --trigger-gpio "$TRIGGER_GPIO" \
   --complete-gpio "$COMPLETE_GPIO" \
+  --complete-pulse-ms 1000 \
   --heartbeat-led-gpio "$HEARTBEAT_LED_GPIO" \
   --capture-dir "$CAPTURE_DIR" \
   --recording-dir "$RECORDING_DIR" \
